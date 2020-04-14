@@ -1,0 +1,8 @@
+{
+  "name": "you-thee-watcher",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:e5f6bd/you-thee-watcher.git",
+  "author": "e5f6bd",
+  "license": "MIT"
+}
