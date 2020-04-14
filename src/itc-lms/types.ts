@@ -1,42 +1,44 @@
-interface Course {
-    informations: Information[];
+import {Dayjs} from "dayjs";
+
+export interface Course {
+    notifications: Notification[];
     materials: Material[];
     assignments: Assignment[];
 }
 
-interface Information {
+export interface Notification {
     title: string;
     contents: string;
-    postingPeriod: string;
+    postingPeriod: Period;
 }
 
-interface Material {
+export interface Material {
     title: string;
     contents: string;
     publicationPeriod: string;
     items: MaterialItem[];
 }
 
-interface MaterialItem {
+export interface MaterialItem {
     title: string;
     comments: string;
-    createDate: Date;
+    createDate: Dayjs;
     contents: AttachmentFile | AttachmentLink | AttachmentVideo;
 }
 
-interface Link {
+export interface Link {
     url: string;
 }
 
-interface AttachmentLink extends Link {
+export interface AttachmentLink extends Link {
     type: "Link";
 }
 
-interface AttachmentVideo extends Link {
+export interface AttachmentVideo extends Link {
     type: "Video";
 }
 
-interface Assignment {
+export interface Assignment {
     title: string;
     contents: string;
     attachmentFiles: AttachmentFile[];
@@ -47,17 +49,17 @@ interface Assignment {
     // submissionCrossReferenceEnabled: boolean;
 }
 
-enum AssignmentSubmissionMethod {
+export enum AssignmentSubmissionMethod {
     UploadFile,
     TextDirectlyInput,
 }
 
-interface Period {
-    start: Date;
-    end: Date;
+export interface Period {
+    start: Dayjs;
+    end: Dayjs;
 }
 
-interface AttachmentFile {
+export interface AttachmentFile {
     filename: string;
     // sha256sum: string;
 }

@@ -1,4 +1,5 @@
 import puppeteer, {Page} from 'puppeteer';
+import {getCourse} from "./itc-lms/api";
 
 const debugMode = !!process.env.YOU_THEE_DEBUG_MODE;
 
@@ -34,7 +35,16 @@ const logInToItcLms = async (page: Page): Promise<boolean> => {
 (async () => {
     const browser = await puppeteer.launch({headless: !debugMode});
     const page = await browser.newPage();
-    console.log(await logInToItcLms(page));
-    await page.waitFor(30000);
+    if(!await logInToItcLms(page)){
+        console.error("Failed to log in.")
+        await page.waitFor(60000);
+        throw new Error();
+    }
+    await page.waitFor(1000);
+
+    const course = await getCourse(page, process.env.YOU_THEE_DEBUG_COURSE_ID || "");
+    console.log(course);
+    await page.waitFor(60000);
+
     await browser.close();
 })().catch(console.error);
