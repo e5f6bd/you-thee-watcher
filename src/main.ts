@@ -43,7 +43,7 @@ const logInToItcLms = async (page: Page): Promise<boolean> => {
     await page.waitFor(1000);
 
     const course = await getCourse(page, process.env.YOU_THEE_DEBUG_COURSE_ID || "");
-    console.log(course);
+    await page.evaluate(async (arg) => console.log(JSON.parse(arg)), JSON.stringify(course));
     await page.waitFor(60000);
 
     await browser.close();

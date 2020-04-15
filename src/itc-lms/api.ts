@@ -1,6 +1,6 @@
 import * as querystring from "querystring";
-import {Page} from "puppeteer";
-import {Course, Notification, Period} from "./types";
+import {ElementHandle, Page} from "puppeteer";
+import {Assignment, AssignmentSubmissionMethod, AttachmentFile, Course, Notification, Period} from "./types";
 import dayjs from "dayjs";
 
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -17,6 +17,26 @@ const strToPeriod = (str: string): Period => {
         end: dayjs(split[1]),
     };
 }
+const getStringProperty = async (element: ElementHandle, propertyName: string): Promise<string> => {
+    const property = await element.getProperty(propertyName);
+    return await property.jsonValue() as string;
+};
+const resolveURL = async (page: Page, relativeUrl: string): Promise<string> => {
+    return new URL(relativeUrl, await page.evaluate(async () => document.baseURI)).href;
+}
+
+const parseRichText = async (element: ElementHandle): Promise<string> => {
+    // TODO parse rich text style such as bold, italic, underline, hyperlink, tex equation, and so on.
+    // TODO Is innerText the best way?
+    return await getStringProperty(element, "innerText") || "";
+}
+const parseAttachmentDiv = async (element: ElementHandle): Promise<AttachmentFile> => {
+    const [title, filename, objectName] =
+        await Promise.all(["downloadFile", "fileName", "objectName"].map(async className =>
+            await getStringProperty(
+                (await element.$(`div.${className}`))!, "innerText")));
+    return {title, filename, objectName}
+}
 
 export const getCourse = async (page: Page, courseId: string): Promise<Course> => {
     await page.goto(
@@ -24,19 +44,14 @@ export const getCourse = async (page: Page, courseId: string): Promise<Course> =
         {"waitUntil": "networkidle0"});
     const notifications: Notification[] = [];
     for (const element of await page.$$("div#information div.subblock_list_line")) {
-        const titleElement = await element.$("div.subblock_list_txt1");
-        if (titleElement === null) throw new Error("No title block found");
-        const titleHandle = await titleElement.getProperty("textContent");
-        const title = await titleHandle.jsonValue() as string || "";
+        const titleElement = (await element.$("div.subblock_list_txt1"))!;
+        const title = await getStringProperty(titleElement, "textContent") || "";
 
-        const periodElement = await element.$("div.subblock_list_txt2");
-        if (periodElement === null) throw new Error("No period block found");
-        const periodHandle = await periodElement!.getProperty("textContent");
-        const periodStr = await periodHandle!.jsonValue() as string || "";
+        const periodStr = await getStringProperty(
+            (await element.$("div.subblock_list_txt2"))!, "textContent");
 
         // Open notification by clicking the link
-        const clickElement = await titleElement.$("a");
-        if (clickElement === null) throw new Error("No element to click was found");
+        const clickElement = (await titleElement.$("a"))!;
         await clickElement.click();
 
         // Wait until the notification contents are loaded
@@ -51,14 +66,11 @@ export const getCourse = async (page: Page, courseId: string): Promise<Course> =
         if (dialog === null) throw new Error("Dialog not found...");
 
         // get the contents
-        const contentsElement = await dialog.$("div.textareaContents");
-        if(contentsElement === null) throw new Error("Contents Element not found...");
-        const contentsHandle = await contentsElement.getProperty("innerText"); // <- is innerText the best way?
-        const contents = await contentsHandle.jsonValue() as string;
+        const contents = await parseRichText((await dialog.$("div.textareaContents"))!);
 
         // close the dialog
-        const closeElement = await dialog.$("div.ui-dialog-buttonpane button");
-        await closeElement!.click();
+        const closeElement = (await dialog.$("div.ui-dialog-buttonpane button"))!;
+        await closeElement.click();
         await page.waitFor(500);
 
         notifications.push({
@@ -67,9 +79,35 @@ export const getCourse = async (page: Page, courseId: string): Promise<Course> =
             postingPeriod: strToPeriod(periodStr),
         });
     }
+    const assignments: Assignment[] = [];
+    for (const element of await page.$$("div#report div.report_list_line")) {
+        const entryLinkDiv = (await element.$("div.result_list_txt"))!;  // there are five columns, get the first
+        const url = await getStringProperty((await entryLinkDiv.$x("./a/@href"))[0], "value");
+        const newPage = await page.browser().newPage();
+        await newPage.goto(await resolveURL(page, url), {"waitUntil": "networkidle0"});
+
+        const [titleDiv, contentsDiv, attachmentsDiv, submissionPeriodDiv, lateSubmissionDiv] =
+            await newPage.$$("div.page_supple div.subblock_form");
+
+        const title = await getStringProperty(titleDiv, "innerText");
+        const contents = await parseRichText((await contentsDiv.$("div.textareaContents"))!);
+        const attachmentFiles = await Promise.all(
+            (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv));
+        const submissionPeriod = strToPeriod(
+            await getStringProperty(submissionPeriodDiv, "innerText"))
+        const lateSubmissionAllowed = "Enable" ===
+            await getStringProperty(lateSubmissionDiv, "innerText");
+
+        assignments.push({
+            title, attachmentFiles, contents, submissionPeriod, lateSubmissionAllowed,
+            submissionMethod: AssignmentSubmissionMethod.UploadFile,  // TODO parse it
+        })
+
+        await newPage.close();
+    }
     return {
         notifications,
-        assignments: [],
+        assignments,
         materials: [],
     };
 }

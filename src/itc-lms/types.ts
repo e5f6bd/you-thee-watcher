@@ -60,6 +60,7 @@ export interface Period {
 }
 
 export interface AttachmentFile {
+    title: string;
     filename: string;
-    // sha256sum: string;
+    objectName: string;
 }
