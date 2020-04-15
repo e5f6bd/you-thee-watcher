@@ -38,73 +38,86 @@ const parseAttachmentDiv = async (element: ElementHandle): Promise<AttachmentFil
     return {title, filename, objectName}
 }
 
+const parseNotification = (page: Page) => async (element: ElementHandle): Promise<Notification> => {
+    const titleElement = (await element.$("div.subblock_list_txt1"))!;
+    const title = await getStringProperty(titleElement, "textContent") || "";
+
+    const periodStr = await getStringProperty(
+        (await element.$("div.subblock_list_txt2"))!, "textContent");
+
+    // Open notification by clicking the link
+    const clickElement = (await titleElement.$("a"))!;
+    await clickElement.click();
+
+    // Wait until the notification contents are loaded
+    // (This is judged by the completion of the request below)
+    await page.waitForResponse(response =>
+        response.url().indexOf("https://itc-lms.ecc.u-tokyo.ac.jp/lms/coursetop/information/listdetail") !== -1);
+    // Wait for additional time just in case (because the DOM may not be ready immediately)
+    await page.waitFor(100);
+
+    // Get the dialog
+    const dialog = await page.$("div[role=dialog]");
+    if (dialog === null) throw new Error("Dialog not found...");
+
+    // get the contents
+    const contents = await parseRichText((await dialog.$("div.textareaContents"))!);
+
+    // close the dialog
+    const closeElement = (await dialog.$("div.ui-dialog-buttonpane button"))!;
+    await closeElement.click();
+    await page.waitFor(500);
+
+    return {
+        title,
+        contents,
+        postingPeriod: strToPeriod(periodStr),
+    };
+}
+
+const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<Assignment> => {
+    const entryLinkDiv = (await element.$("div.result_list_txt"))!;  // there are five columns, get the first
+    const url = await getStringProperty((await entryLinkDiv.$x("./a/@href"))[0], "value");
+    const newPage = await page.browser().newPage();
+    await newPage.goto(await resolveURL(page, url), {"waitUntil": "networkidle0"});
+
+    const [titleDiv, contentsDiv, attachmentsDiv, submissionPeriodDiv, lateSubmissionDiv] =
+        await newPage.$$("div.page_supple div.subblock_form");
+
+    const title = await getStringProperty(titleDiv, "innerText");
+    const contents = await parseRichText((await contentsDiv.$("div.textareaContents"))!);
+    const attachmentFiles = await Promise.all(
+        (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv));
+    const submissionPeriod = strToPeriod(
+        await getStringProperty(submissionPeriodDiv, "innerText"))
+    const lateSubmissionAllowed = "Enable" ===
+        await getStringProperty(lateSubmissionDiv, "innerText");
+
+    await newPage.close();
+
+    return {
+        title, attachmentFiles, contents, submissionPeriod, lateSubmissionAllowed,
+        submissionMethod: AssignmentSubmissionMethod.UploadFile,  // TODO parse it
+    };
+}
+
 export const getCourse = async (page: Page, courseId: string): Promise<Course> => {
     await page.goto(
         "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course?" + querystring.encode({idnumber: courseId}),
         {"waitUntil": "networkidle0"});
-    const notifications: Notification[] = [];
+
+    const notifications = [];
+    // Promise.all cannot be used here because each notification window has to be opened separately
     for (const element of await page.$$("div#information div.subblock_list_line")) {
-        const titleElement = (await element.$("div.subblock_list_txt1"))!;
-        const title = await getStringProperty(titleElement, "textContent") || "";
-
-        const periodStr = await getStringProperty(
-            (await element.$("div.subblock_list_txt2"))!, "textContent");
-
-        // Open notification by clicking the link
-        const clickElement = (await titleElement.$("a"))!;
-        await clickElement.click();
-
-        // Wait until the notification contents are loaded
-        // (This is judged by the completion of the request below)
-        await page.waitForResponse(response =>
-            response.url().indexOf("https://itc-lms.ecc.u-tokyo.ac.jp/lms/coursetop/information/listdetail") !== -1);
-        // Wait for additional time just in case (because the DOM may not be ready immediately)
-        await page.waitFor(100);
-
-        // Get the dialog
-        const dialog = await page.$("div[role=dialog]");
-        if (dialog === null) throw new Error("Dialog not found...");
-
-        // get the contents
-        const contents = await parseRichText((await dialog.$("div.textareaContents"))!);
-
-        // close the dialog
-        const closeElement = (await dialog.$("div.ui-dialog-buttonpane button"))!;
-        await closeElement.click();
-        await page.waitFor(500);
-
-        notifications.push({
-            title,
-            contents,
-            postingPeriod: strToPeriod(periodStr),
-        });
+        notifications.push(await parseNotification(page)(element));
     }
-    const assignments: Assignment[] = [];
+
+    const assignments = [];
+    // This may be replaced with Promise.all, but for now it's left unchanged for the sake of consistency
     for (const element of await page.$$("div#report div.report_list_line")) {
-        const entryLinkDiv = (await element.$("div.result_list_txt"))!;  // there are five columns, get the first
-        const url = await getStringProperty((await entryLinkDiv.$x("./a/@href"))[0], "value");
-        const newPage = await page.browser().newPage();
-        await newPage.goto(await resolveURL(page, url), {"waitUntil": "networkidle0"});
-
-        const [titleDiv, contentsDiv, attachmentsDiv, submissionPeriodDiv, lateSubmissionDiv] =
-            await newPage.$$("div.page_supple div.subblock_form");
-
-        const title = await getStringProperty(titleDiv, "innerText");
-        const contents = await parseRichText((await contentsDiv.$("div.textareaContents"))!);
-        const attachmentFiles = await Promise.all(
-            (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv));
-        const submissionPeriod = strToPeriod(
-            await getStringProperty(submissionPeriodDiv, "innerText"))
-        const lateSubmissionAllowed = "Enable" ===
-            await getStringProperty(lateSubmissionDiv, "innerText");
-
-        assignments.push({
-            title, attachmentFiles, contents, submissionPeriod, lateSubmissionAllowed,
-            submissionMethod: AssignmentSubmissionMethod.UploadFile,  // TODO parse it
-        })
-
-        await newPage.close();
+        assignments.push(await parseAssignment(page)(element))
     }
+
     return {
         notifications,
         assignments,
