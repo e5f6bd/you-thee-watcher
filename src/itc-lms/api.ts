@@ -31,8 +31,8 @@ const getStringProperty = async (element: ElementHandle, propertyName: string): 
     const property = await element.getProperty(propertyName);
     return await property.jsonValue() as string;
 };
-const resolveURL = async (page: Page, relativeUrl: string): Promise<string> => {
-    return new URL(relativeUrl, await page.evaluate(async () => document.baseURI)).href;
+const getURLObject = async (page: Page, relativeUrl: string): Promise<URL> => {
+    return new URL(relativeUrl, await page.evaluate(async () => document.baseURI));
 }
 
 const parseRichText = async (element: ElementHandle): Promise<string> => {
@@ -45,7 +45,7 @@ const parseAttachmentDiv = (fileNameClassName: string) => async (element: Elemen
         await Promise.all([fileNameClassName, "fileName", "objectName"].map(async className =>
             await getStringProperty(
                 (await element.$(`.${className}`))!, "innerText")));
-    return {title, filename, objectName}
+    return {id: objectName, title, filename}
 }
 
 const parseNotification = (page: Page) => async (element: ElementHandle): Promise<Notification> => {
@@ -55,9 +55,12 @@ const parseNotification = (page: Page) => async (element: ElementHandle): Promis
     const periodStr = await getStringProperty(
         (await element.$("div.subblock_list_txt2"))!, "textContent");
 
+    const linkElement = (await titleElement.$("a"))!;
+    const onclickValue = await getStringProperty((await linkElement.$x("@onclick"))[0], "value");
+    const id = onclickValue.match(/InfoDetailCourseTop\(event,(\d+)\);/)![1];
+
     // Open notification by clicking the link
-    const clickElement = (await titleElement.$("a"))!;
-    await clickElement.click();
+    await linkElement.click();
 
     // Wait until the notification contents are loaded
     // (This is judged by the completion of the request below)
@@ -79,17 +82,18 @@ const parseNotification = (page: Page) => async (element: ElementHandle): Promis
     await page.waitFor(500);
 
     return {
-        title,
-        contents,
+        id, title, contents,
         postingPeriod: strToPeriod(periodStr),
     };
 }
 
 const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<Assignment> => {
     const entryLinkDiv = (await element.$("div.result_list_txt"))!;  // there are five columns, get the first
-    const url = await getStringProperty((await entryLinkDiv.$x("./a/@href"))[0], "value");
+    const href = await getStringProperty((await entryLinkDiv.$x("./a/@href"))[0], "value");
     const newPage = await page.browser().newPage();
-    await newPage.goto(await resolveURL(page, url), {"waitUntil": "networkidle0"});
+    const url = await getURLObject(page, href);
+    const id = url.searchParams.get('reportId')!;
+    await newPage.goto(url.href, {"waitUntil": "networkidle0"});
 
     const [titleDiv, contentsDiv, attachmentsDiv, submissionPeriodDiv, lateSubmissionDiv] =
         await newPage.$$("div.page_supple div.subblock_form");
@@ -106,7 +110,7 @@ const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<
     await newPage.close();
 
     return {
-        title, attachmentFiles, contents, submissionPeriod, lateSubmissionAllowed,
+        id, title, attachmentFiles, contents, submissionPeriod, lateSubmissionAllowed,
         submissionMethod: AssignmentSubmissionMethod.UploadFile,  // TODO parse it
     };
 }
@@ -121,7 +125,11 @@ const parseMaterial = async (
     const publicationPeriod = await strToPeriod(await getStringProperty(publicationPeriodDiv, "innerText"));
     const contents = await parseRichText(commentDiv);
     const items: MaterialItem[] = [];
+    let materialId = "";  // Only set when there are any items
+
     for (const itemDiv of itemDivs) {
+        const itemId = await getStringProperty(itemDiv, "id");
+
         const [fileDiv, commentDiv, dateDiv] = await itemDiv.$$("div.result_list_txt");
         const itemTitle = await getStringProperty(fileDiv, "innerText");
         const comments = await getStringProperty(commentDiv, "innerText");
@@ -146,11 +154,19 @@ const parseMaterial = async (
         }
 
         items.push({
-            title: itemTitle, comments, contents, createDate
-        })
+            id: itemId, title: itemTitle,
+            comments, contents, createDate
+        });
+
+        if (!materialId) {
+            materialId = await getStringProperty((await fileDiv.$("#dlMaterialId"))!, "value");
+        }
     }
 
-    return {title, publicationPeriod, contents, items}
+    return {
+        id: materialId,
+        title, publicationPeriod, contents, items,
+    }
 };
 
 const parseMaterials = async (page: Page) => {

@@ -7,12 +7,17 @@ export interface Course {
 }
 
 export interface Notification {
+    id: string;
     title: string;
     contents: string;
     postingPeriod: Period;
 }
 
 export interface Material {
+    id: string;
+    // In some rare occasion (where the material does not have any items), material ID is not available.
+    // In such case, this will be a empty string.
+    // Therefore, material ID is not guaranteed to be unique.
     title: string;
     contents: string;
     publicationPeriod: Period;
@@ -20,6 +25,7 @@ export interface Material {
 }
 
 export interface MaterialItem {
+    id: string;
     title: string;
     comments: string;
     createDate: Dayjs;
@@ -41,6 +47,7 @@ export interface AttachmentVideo extends Link {
 }
 
 export interface Assignment {
+    id: string;
     title: string;
     contents: string;
     attachmentFiles: AttachmentFile[];
@@ -62,7 +69,7 @@ export interface Period {
 }
 
 export interface AttachmentFile {
+    id: string;  // Which is called objectName in the website
     title: string;
     filename: string;
-    objectName: string;
 }
