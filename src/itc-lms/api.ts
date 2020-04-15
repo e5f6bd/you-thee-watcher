@@ -12,7 +12,9 @@ import {
     Period
 } from "./types";
 import dayjs from "dayjs";
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 
+dayjs.extend(customParseFormat)
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
 // The first and the last moment that can be handled with JavaScript.
 const periodFallback: Period = {
@@ -23,8 +25,8 @@ const strToPeriod = (str: string): Period => {
     const split = str.split(" ～ ");
     if (split.length < 2) return periodFallback;
     return {
-        start: dayjs(split[0]),
-        end: dayjs(split[1]),
+        start: dayjs(split[0] + " +09:00", "YYYY/MM/DD HH:mm Z"),
+        end: dayjs(split[1] + " +09:00", "YYYY/MM/DD HH:mm Z"),
     };
 }
 const getStringProperty = async (element: ElementHandle, propertyName: string): Promise<string> => {
@@ -133,7 +135,8 @@ const parseMaterial = async (
         const [fileDiv, commentDiv, dateDiv] = await itemDiv.$$("div.result_list_txt");
         const itemTitle = await getStringProperty(fileDiv, "innerText");
         const comments = await getStringProperty(commentDiv, "innerText");
-        const createDate = dayjs(await getStringProperty(dateDiv, "innerText"));
+        const createDate = dayjs(
+            await getStringProperty(dateDiv, "innerText") + " 09:00", "YYYY/MM/DD Z");
 
         let contents: MaterialItemContents;
         const linkElement = await fileDiv.$("a");
