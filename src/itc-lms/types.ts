@@ -15,7 +15,7 @@ export interface Notification {
 export interface Material {
     title: string;
     contents: string;
-    publicationPeriod: string;
+    publicationPeriod: Period;
     items: MaterialItem[];
 }
 
@@ -23,8 +23,10 @@ export interface MaterialItem {
     title: string;
     comments: string;
     createDate: Dayjs;
-    contents: AttachmentFile | AttachmentLink | AttachmentVideo;
+    contents: MaterialItemContents;
 }
+
+export type MaterialItemContents = AttachmentFile | AttachmentLink | AttachmentVideo
 
 export interface Link {
     url: string;

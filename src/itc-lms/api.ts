@@ -1,6 +1,16 @@
 import * as querystring from "querystring";
 import {ElementHandle, Page} from "puppeteer";
-import {Assignment, AssignmentSubmissionMethod, AttachmentFile, Course, Notification, Period} from "./types";
+import {
+    Assignment,
+    AssignmentSubmissionMethod,
+    AttachmentFile,
+    Course,
+    Material,
+    MaterialItem,
+    MaterialItemContents,
+    Notification,
+    Period
+} from "./types";
 import dayjs from "dayjs";
 
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -30,11 +40,11 @@ const parseRichText = async (element: ElementHandle): Promise<string> => {
     // TODO Is innerText the best way?
     return await getStringProperty(element, "innerText") || "";
 }
-const parseAttachmentDiv = async (element: ElementHandle): Promise<AttachmentFile> => {
+const parseAttachmentDiv = (fileNameClassName: string) => async (element: ElementHandle): Promise<AttachmentFile> => {
     const [title, filename, objectName] =
-        await Promise.all(["downloadFile", "fileName", "objectName"].map(async className =>
+        await Promise.all([fileNameClassName, "fileName", "objectName"].map(async className =>
             await getStringProperty(
-                (await element.$(`div.${className}`))!, "innerText")));
+                (await element.$(`.${className}`))!, "innerText")));
     return {title, filename, objectName}
 }
 
@@ -87,7 +97,7 @@ const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<
     const title = await getStringProperty(titleDiv, "innerText");
     const contents = await parseRichText((await contentsDiv.$("div.textareaContents"))!);
     const attachmentFiles = await Promise.all(
-        (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv));
+        (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv("downloadFile")));
     const submissionPeriod = strToPeriod(
         await getStringProperty(submissionPeriodDiv, "innerText"))
     const lateSubmissionAllowed = "Enable" ===
@@ -101,9 +111,88 @@ const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<
     };
 }
 
+const parseMaterial = async (
+    titleDiv: ElementHandle,
+    publicationPeriodDiv: ElementHandle,
+    commentDiv: ElementHandle,
+    itemDivs: ElementHandle[]
+): Promise<Material> => {
+    const title = await getStringProperty(titleDiv, "innerText");
+    const publicationPeriod = await strToPeriod(await getStringProperty(publicationPeriodDiv, "innerText"));
+    const contents = await parseRichText(commentDiv);
+    const items: MaterialItem[] = [];
+    for (const itemDiv of itemDivs) {
+        const [fileDiv, commentDiv, dateDiv] = await itemDiv.$$("div.result_list_txt");
+        const itemTitle = await getStringProperty(fileDiv, "innerText");
+        const comments = await getStringProperty(commentDiv, "innerText");
+        const createDate = dayjs(await getStringProperty(dateDiv, "innerText"));
+
+        let contents: MaterialItemContents;
+        const linkElement = await fileDiv.$("a");
+        const videoElement = await fileDiv.$("video");
+        if (linkElement) {
+            contents = {
+                type: "Link",
+                url: await getStringProperty((await linkElement.$x("@href"))[0], "value")
+            };
+        } else if (videoElement) {
+            contents = {
+                type: "Video",
+                url: await getStringProperty(
+                    (await videoElement.$x(".//source/@src"))[0], "value")
+            };
+        } else {
+            contents = await parseAttachmentDiv("fileDownload")(fileDiv);
+        }
+
+        items.push({
+            title: itemTitle, comments, contents, createDate
+        })
+    }
+
+    return {title, publicationPeriod, contents, items}
+};
+
+const parseMaterials = async (page: Page) => {
+    // An entry of material consists of its title, publication period, comment,
+    // table header and rows, in this order, each of which forms a child block in the materialList.
+    // To make implementation simpler, the blocks are iterated in the reversed order.
+    // Once it founds a title block, the block components collected so far are
+    // parsed into a material entry.
+
+    type ElementHandleOpt = ElementHandle | null;
+    let publicationPeriodDiv: ElementHandleOpt = null,
+        commentDiv: ElementHandleOpt = null,
+        materialItemDivs: ElementHandle[] = [];
+
+    const materials: Material[] = []
+
+    for (const block of (await page.$x(`id("materialList")/div`)).reverse()) {
+        const classes = new Set(Object.values(
+            await block.getProperty("classList").then(e => e.jsonValue()) as { [key: string]: string }));
+        if (classes.has('subblock_list_head')) {
+            materials.push(await parseMaterial(block, publicationPeriodDiv!, commentDiv!, materialItemDivs.reverse()));
+            publicationPeriodDiv = null;
+            commentDiv = null;
+            materialItemDivs = [];
+        } else if (classes.has('subblock_line')) {
+            publicationPeriodDiv = block;
+        } else if (classes.has('subblock_list_comment')) {
+            commentDiv = block;
+        } else if (classes.has('result_list_line')) {
+            materialItemDivs.push(block);
+        }
+    }
+
+    return materials;
+};
+
 export const getCourse = async (page: Page, courseId: string): Promise<Course> => {
     await page.goto(
-        "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course?" + querystring.encode({idnumber: courseId}),
+        "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course?" + querystring.encode({
+            idnumber: courseId,
+            selectDisplayView: "ASSISTANT_ADD",
+        }),
         {"waitUntil": "networkidle0"});
 
     const notifications = [];
@@ -118,9 +207,7 @@ export const getCourse = async (page: Page, courseId: string): Promise<Course> =
         assignments.push(await parseAssignment(page)(element))
     }
 
-    return {
-        notifications,
-        assignments,
-        materials: [],
-    };
+    const materials = await parseMaterials(page);
+
+    return {notifications, assignments, materials};
 }
