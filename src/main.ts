@@ -1,51 +1,23 @@
-import puppeteer, {Page} from 'puppeteer';
-import {getCourse} from "./itc-lms/api";
+import puppeteer from 'puppeteer';
+import {getAllCourses, getCourse, logInToItcLms} from "./itc-lms/api";
+import {promises as fs} from "fs";
 
 const debugMode = !!process.env.YOU_THEE_DEBUG_MODE;
 
-const logInToItcLms = async (page: Page): Promise<boolean> => {
-    await page.setCookie({
-        name: "JSESSIONID",
-        value: process.env.YOU_THEE_ITC_LMS_JSESSION_ID || "",
-        domain: "itc-lms.ecc.u-tokyo.ac.jp",
-        path: "/",
-        httpOnly: true,
-        secure: true,
-    }, {
-        name: "ing",
-        value: process.env.YOU_THEE_ITC_LMS_ING || "",
-        domain: ".itc-lms.ecc.u-tokyo.ac.jp",
-        path: "/",
-        httpOnly: true,
-    });
-    await page.goto('https://itc-lms.ecc.u-tokyo.ac.jp', {
-        "waitUntil": "networkidle0"
-    });
-    const url = page.url();
-    switch (url) {
-        case "https://itc-lms.ecc.u-tokyo.ac.jp/lms/timetable":
-            return true;
-        case "https://itc-lms.ecc.u-tokyo.ac.jp/login":
-            return false;
-        default:
-            throw new Error(`Unexpected URL: ${url}`);
-    }
-}
-
 (async () => {
     const browser = await puppeteer.launch({headless: !debugMode});
-    const page = await browser.newPage();
-    if(!await logInToItcLms(page)){
-        console.error("Failed to log in.")
-        await page.waitFor(60000);
-        throw new Error();
-    }
-    await page.waitFor(1000);
 
-    const course = await getCourse(page, process.env.YOU_THEE_DEBUG_COURSE_ID || "");
-    await page.evaluate(async (arg) => console.log(JSON.parse(arg)), JSON.stringify(course));
-    console.log(JSON.stringify(course));
-    await page.waitFor(60000);
+    const page = (await browser.pages())[0];
+    if(!await logInToItcLms(page)) throw new Error("Failed to log in");
+    if (process.env.YOU_THEE_DEBUG_COURSE_ID) {
+        // single-course debug mode
+        console.log(JSON.stringify(await getCourse(browser)(process.env.YOU_THEE_DEBUG_COURSE_ID)))
+    } else {
+        const courses = await getAllCourses(browser);
+        await fs.writeFile("data-store/itc-lms.json", JSON.stringify(courses));
+    }
+
+    await page.waitFor(6000000);
 
     await browser.close();
 })().catch(console.error);
