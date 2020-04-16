@@ -6,6 +6,7 @@
   "author": "e5f6bd",
   "license": "MIT",
   "dependencies": {
+    "@slack/web-api": "^5.8.0",
     "dayjs": "^1.8.24",
     "dotenv": "^8.2.0",
     "puppeteer": "^2.1.1",

@@ -13,6 +13,7 @@ import {
 } from "./types";
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat'
+import {distinct} from "../utils";
 
 dayjs.extend(customParseFormat)
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -217,6 +218,8 @@ export const getCourse = (browser: Browser) => async (courseId: string): Promise
         {"waitUntil": "networkidle0"});
     if (!checkLogIn(page)) throw new Error("Not logged in.");
 
+    const name = await getInnerText((await page.$("#courseName div.page_name_txt"))!);
+
     const notifications = [];
     // Promise.all cannot be used here because each notification window has to be opened separately
     for (const element of await page.$$("div#information div.subblock_list_line")) {
@@ -232,7 +235,10 @@ export const getCourse = (browser: Browser) => async (courseId: string): Promise
     const materials = await parseMaterials(page);
     await page.close();
 
-    return {notifications, assignments, materials};
+    return {
+        id: courseId, name,
+        notifications, assignments, materials
+    };
 }
 
 /**
@@ -273,19 +279,19 @@ const checkLogIn = (page: Page): boolean => {
     return page.url() !== "https://itc-lms.ecc.u-tokyo.ac.jp/login";
 }
 
-/**
- *
- * @param browser
- */
 export const getAllCourses = async (browser: Browser): Promise<Course[]> => {
     const page = (await browser.pages())[0];
     await page.goto("https://itc-lms.ecc.u-tokyo.ac.jp/lms/timetable?selectToday=true",
         {waitUntil: "networkidle0"});
-    const availableCourses =
-        new Set<string>(await page.$$("div.course_on_timetable")
+    let courseIds =
+        distinct(await page.$$("div.course_on_timetable")
             .then(es => Promise.all(es.map(getStringProperty("id")))));
+    if (process.env.YOU_THEE_DEBUG_COURSE_IDS) {
+        const limitedCourseIds = new Set(process.env.YOU_THEE_DEBUG_COURSE_IDS.split(","));
+        courseIds = courseIds.filter(x => limitedCourseIds.has(x));
+    }
     const courses = [];
-    for (const courseId of availableCourses) {
+    for (const courseId of courseIds) {
         courses.push(await getCourse(browser)(courseId));
     }
     return courses;

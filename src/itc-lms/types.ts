@@ -3,6 +3,8 @@ import {Dayjs} from "dayjs";
 export type DateLike = Dayjs | string;
 
 export interface Course {
+    id: string;
+    name: string;
     notifications: Notification[];
     materials: Material[];
     assignments: Assignment[];
