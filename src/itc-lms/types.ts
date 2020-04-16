@@ -1,5 +1,7 @@
 import {Dayjs} from "dayjs";
 
+export type DateLike = Dayjs | string;
+
 export interface Course {
     notifications: Notification[];
     materials: Material[];
@@ -28,7 +30,7 @@ export interface MaterialItem {
     id: string;
     title: string;
     comments: string;
-    createDate: Dayjs;
+    createDate: DateLike;
     contents: MaterialItemContents;
 }
 
@@ -64,8 +66,8 @@ export enum AssignmentSubmissionMethod {
 }
 
 export interface Period {
-    start: Dayjs;
-    end: Dayjs;
+    start: DateLike;
+    end: DateLike;
 }
 
 export interface AttachmentFile {
