@@ -118,13 +118,6 @@ const getDownloadUrl = (file: AttachmentFile): string => {
         });
 };
 
-const collectAllAttachmentFiles = (course: Course): AttachmentFile[] => {
-    return new Array<AttachmentFile>().concat(
-        course.assignments.flatMap(a => a.attachmentFiles),
-        course.materials.flatMap(m => m.items).flatMap(i => i.contents).filter(materialItemIsFile),
-    );
-}
-
 interface ItcLmsCredentials {
     ing: string;
     JSESSIONID: string;
