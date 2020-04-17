@@ -23,3 +23,17 @@ export const createDriveClient = async (): Promise<Drive> => {
 
     return google.drive({version: "v3", auth: oauth2Client});
 };
+
+export const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
+
+export const createFolderAndGetId = async (drive: drive_v3.Drive, name: string, ...parents: string[]) => {
+    let response = await drive.files.create({
+        requestBody: {
+            name: name,
+            parents: parents,
+            mimeType: DRIVE_FOLDER_MIME_TYPE,
+        },
+        fields: "id",
+    });
+    return response.data.id!;
+};
