@@ -7,10 +7,9 @@ import {distinct, sameSet, sleep} from "./utils";
 import {materialItemIsFile, samePeriod} from "./itc-lms/utils";
 import * as querystring from "querystring";
 import fetch from 'node-fetch';
-import * as util from "util";
-import * as stream from "stream";
-
-const pipeline = util.promisify(stream.pipeline);
+import {createDriveClient} from "./drive";
+import {drive_v3} from "googleapis";
+import Schema$File = drive_v3.Schema$File;
 
 const debugMode = !!process.env.YOU_THEE_DEBUG_MODE;
 
@@ -192,15 +191,16 @@ const getCredentialsFromCookies = (cookies: Cookie[]): ItcLmsCredentials => {
 
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
 
+    const drive = await createDriveClient();
     const driveIdMap = await fs.promises.open(driveJsonPath, "r")
         .then(async f => {
             const str = await fs.promises.readFile(f, "utf-8");
             await f.close();
             return new Map<string, string>(Object.entries(JSON.parse(str)));
-        }).catch(() => new Map<string, Course>());
+        }).catch(() => new Map<string, string>());
     for (const file of Array.from(courses.values()).flatMap(collectAllAttachmentFiles)) {
-        console.log(`Downloading: ${file}`)
         if (driveIdMap.has(file.id)) continue;
+        console.log(`Saving ${file.id}`);
         const response = await fetch(getDownloadUrl(file), {
             headers: {
                 "Cookie": `ing=${credentials.ing}; JSESSIONID=${credentials.JSESSIONID}`
@@ -210,6 +210,19 @@ const getCredentialsFromCookies = (cookies: Cookie[]): ItcLmsCredentials => {
             console.error(`Failed to download ${file.id}`);
             continue;
         }
-        await pipeline(response.body, fs.createWriteStream(`./data-store/itc-lms-downloads/${file.filename}`));
+        await drive.files.create({
+            requestBody: {
+                name: file.filename,
+                parents: [process.env.YOU_THEE_DRIVE_MASTER_FOLDER_ID!],
+            },
+            media: {
+                mimeType: "application/octet-stream",
+                body: response.body,
+            },
+            fields: "id"
+        }).then(({data: {id: driveFileId}}: { data: Schema$File }) => {
+            driveIdMap.set(file.id, driveFileId!);
+        }).catch(reason => console.error("Failed to upload file", reason));
     }
+    await fs.promises.writeFile(driveJsonPath, JSON.stringify(Object.fromEntries(driveIdMap.entries())));
 })().catch(console.error);

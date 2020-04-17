@@ -112,3 +112,5 @@ temp/
 
 # Data Store
 data-store/
+# Google API Credentials
+tokens.json
