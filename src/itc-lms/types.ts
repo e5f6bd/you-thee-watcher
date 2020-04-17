@@ -73,6 +73,7 @@ export interface Period {
 }
 
 export interface AttachmentFile {
+    type: "File";
     id: string;  // Which is called objectName in the website
     title: string;
     filename: string;

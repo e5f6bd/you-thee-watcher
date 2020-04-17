@@ -1,10 +1,16 @@
-import puppeteer from 'puppeteer';
+import puppeteer, {Cookie} from 'puppeteer';
 import {getAllCourses, getCourse, logInToItcLms} from "./itc-lms/api";
-import {promises as fs} from "fs";
-import {Assignment, Course, Material, Notification} from "./itc-lms/types";
+import * as fs from "fs";
+import {Assignment, AttachmentFile, Course, Material, Notification} from "./itc-lms/types";
 import {ChatPostMessageArguments, WebClient} from "@slack/web-api";
 import {distinct, sameSet, sleep} from "./utils";
-import {samePeriod} from "./itc-lms/utils";
+import {materialItemIsFile, samePeriod} from "./itc-lms/utils";
+import * as querystring from "querystring";
+import fetch from 'node-fetch';
+import * as util from "util";
+import * as stream from "stream";
+
+const pipeline = util.promisify(stream.pipeline);
 
 const debugMode = !!process.env.YOU_THEE_DEBUG_MODE;
 
@@ -70,7 +76,7 @@ const createMaterialPost = (oldOne?: Material, newOne?: Material): PostDraft[] =
             oldOne.contents !== newOne.contents ||
             !sameSet(oldOne.items.map(x => x.id), newOne.items.map(x => x.id)) ||
             !samePeriod(oldOne.publicationPeriod, newOne.publicationPeriod)
-        ){
+        ) {
             return [{
                 text: `教材「${newOne.title}」の内容が変更されました。`
             }];
@@ -103,20 +109,53 @@ const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDraft[] =>
     return posts;
 };
 
+const getDownloadUrl = (file: AttachmentFile): string => {
+    return "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission_download/" +
+        encodeURIComponent(file.filename) + "?" + querystring.encode({
+            // idnumber: 2020FEN-CO3125L10F01
+            downloadFileName: file.filename,
+            objectName: file.id,
+            // downloadMode:
+        });
+};
+
+const collectAllAttachmentFiles = (course: Course): AttachmentFile[] => {
+    return new Array<AttachmentFile>().concat(
+        course.assignments.flatMap(a => a.attachmentFiles),
+        course.materials.flatMap(m => m.items).flatMap(i => i.contents).filter(materialItemIsFile),
+    );
+}
+
+interface ItcLmsCredentials {
+    ing: string;
+    JSESSIONID: string;
+}
+
+const getCredentialsFromCookies = (cookies: Cookie[]): ItcLmsCredentials => {
+    const ing = cookies.filter(cookie => cookie.domain === '.itc-lms.ecc.u-tokyo.ac.jp' && cookie.name === 'ing')[0];
+    const JSESSIONID = cookies.filter(cookie => cookie.domain === "itc-lms.ecc.u-tokyo.ac.jp" && cookie.name == 'JSESSIONID')[0];
+    if (!ing || !JSESSIONID) throw new Error("Could not obtain credentials cookie from the browser");
+    return {ing: ing.value, JSESSIONID: JSESSIONID.value};
+}
+
+
 (async () => {
     const itcLmsJsonPath = "data-store/itc-lms.json";
-    const courses = await fs.open(itcLmsJsonPath, "r")
+    const driveJsonPath = "data-store/itc-lms-drive.json";
+
+    const courses = await fs.promises.open(itcLmsJsonPath, "r")
         .then(async f => {
-            const str = await fs.readFile(f, "utf-8");
+            const str = await fs.promises.readFile(f, "utf-8");
             await f.close();
             return createIdMap<Course>(JSON.parse(str));
         }).catch(() => new Map<string, Course>());
-    console.log(courses);
 
     const browser = await puppeteer.launch({headless: !debugMode});
 
     const page = (await browser.pages())[0];
     if (!await logInToItcLms(page)) throw new Error("Failed to log in");
+
+    // debug purposes
     if (process.env.YOU_THEE_DEBUG_COURSE_ID) {
         // single-course debug mode
         console.log(JSON.stringify(await getCourse(browser)(process.env.YOU_THEE_DEBUG_COURSE_ID)))
@@ -124,7 +163,9 @@ const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDraft[] =>
         await page.waitFor(6000000);
         return;
     }
+
     const newCourses = await getAllCourses(browser);
+    const credentials = getCredentialsFromCookies(await page.cookies());
     await browser.close();
 
     const slackClient = new WebClient(process.env.YOU_THEE_SLACK_BOT_USER_TOKEN);
@@ -149,5 +190,26 @@ const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDraft[] =>
         courses.set(newCourse.id, newCourse);
     }
 
-    await fs.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
+    await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
+
+    const driveIdMap = await fs.promises.open(driveJsonPath, "r")
+        .then(async f => {
+            const str = await fs.promises.readFile(f, "utf-8");
+            await f.close();
+            return new Map<string, string>(Object.entries(JSON.parse(str)));
+        }).catch(() => new Map<string, Course>());
+    for (const file of Array.from(courses.values()).flatMap(collectAllAttachmentFiles)) {
+        console.log(`Downloading: ${file}`)
+        if (driveIdMap.has(file.id)) continue;
+        const response = await fetch(getDownloadUrl(file), {
+            headers: {
+                "Cookie": `ing=${credentials.ing}; JSESSIONID=${credentials.JSESSIONID}`
+            }
+        });
+        if (!response.ok) {
+            console.error(`Failed to download ${file.id}`);
+            continue;
+        }
+        await pipeline(response.body, fs.createWriteStream(`./data-store/itc-lms-downloads/${file.filename}`));
+    }
 })().catch(console.error);

@@ -14,6 +14,7 @@ import {
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import {distinct} from "../utils";
+import {getStringProperty, getInnerText, getValue} from "../puppeteer-utils";
 
 dayjs.extend(customParseFormat)
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -30,12 +31,6 @@ const strToPeriod = (str: string): Period => {
         end: dayjs(split[1] + " +09:00", "YYYY/MM/DD HH:mm Z"),
     };
 }
-const getStringProperty = (propertyName: string) => async (element: ElementHandle): Promise<string> => {
-    const property = await element.getProperty(propertyName);
-    return await property.jsonValue() as string;
-};
-const getInnerText = getStringProperty("innerText");
-const getValue = getStringProperty("value");
 
 const getURLObject = async (page: Page, relativeUrl: string): Promise<URL> => {
     return new URL(relativeUrl, await page.evaluate(async () => document.baseURI));
@@ -50,7 +45,7 @@ const parseAttachmentDiv = (fileNameClassName: string) => async (element: Elemen
     const [title, filename, objectName] =
         await Promise.all([fileNameClassName, "fileName", "objectName"].map(async className =>
             await getInnerText((await element.$(`.${className}`))!)));
-    return {id: objectName, title, filename}
+    return {type: "File", id: objectName, title, filename}
 }
 
 const parseNotification = (page: Page) => async (element: ElementHandle): Promise<Notification> => {
@@ -208,6 +203,8 @@ const parseMaterials = async (page: Page) => {
 };
 
 export const getCourse = (browser: Browser) => async (courseId: string): Promise<Course> => {
+    console.log(`Obtaining information for ${courseId}`)
+
     const page = await browser.newPage();
     await page.waitFor(500);
     await page.goto(
