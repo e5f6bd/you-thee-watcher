@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    name: Build TeX
+    name: Check for updates
     runs-on: ubuntu-latest
     steps:
       - name: Set up Git repository
