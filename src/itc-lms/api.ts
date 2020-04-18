@@ -205,7 +205,7 @@ const parseMaterials = async (page: Page) => {
 };
 
 export const getCourse = (browser: Browser) => async (courseId: string): Promise<Course> => {
-    console.log(`Obtaining information for ${courseId}`)
+    // console.log(`Obtaining information for ${courseId}`);
 
     const page = await browser.newPage();
     await page.waitFor(500);

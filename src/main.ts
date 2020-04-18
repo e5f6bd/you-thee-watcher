@@ -156,14 +156,15 @@ const saveFileToDriveIfNeeded = async (
     file: AttachmentFile
 ): Promise<string | undefined> => {
     if (driveIdMap.has(file.id)) return;
-    console.log(`Saving ${file.id}`);
+    // console.log(`Saving ${file.id}`);
     const response = await fetch(getAttachmentFileDownloadUrl(file), {
         headers: {
             "Cookie": `ing=${credentials.ing}; JSESSIONID=${credentials.JSESSIONID}`
         }
     });
     if (!response.ok) {
-        console.error(`Failed to download ${file.id}`);
+        // console.error(`Failed to download ${file.id}`);
+        console.error(`Failed to download`);
         return;
     }
     return await drive.files.create({
@@ -179,8 +180,9 @@ const saveFileToDriveIfNeeded = async (
     }).then(({data: driveFile}: { data: Schema$File }) => {
         driveIdMap.set(file.id, driveFile.id!);
         return driveFile.id!;
-    }).catch(async reason => {
-        console.error("Failed to upload file", reason)
+    }).catch(async () => {
+        // console.error("Failed to upload file", reason)
+        console.error("Failed to upload file");
         return undefined;
     });
 };
