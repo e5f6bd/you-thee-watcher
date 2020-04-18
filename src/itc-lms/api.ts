@@ -263,6 +263,7 @@ export const logInToItcLms = async (page: Page): Promise<boolean> => {
     });
     await page.goto('https://itc-lms.ecc.u-tokyo.ac.jp', {waitUntil: "networkidle0"});
     if (page.url() === "https://itc-lms.ecc.u-tokyo.ac.jp/login") {
+        console.log("Cookies are not provided, or the cookies are invalid.");
         await page.goto((await getURLObject(page, "/saml/login?disco=true")).href, {
             waitUntil: "networkidle0"
         });
