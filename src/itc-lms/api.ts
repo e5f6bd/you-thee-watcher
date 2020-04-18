@@ -274,12 +274,14 @@ export const logInToItcLms = async (page: Page): Promise<boolean> => {
             throw new Error(`Location is still at ${page.url()}`);
         });
         if (!process.env.YOU_THEE_ACCOUNT) throw new Error("Failed automatic login: account not set.");
+        await page.waitForSelector('#userNameInput');
         await page.type('#userNameInput', process.env.YOU_THEE_ACCOUNT!);
         const password = process.env.YOU_THEE_PASSWORD || await promisify(Read)({
             prompt: "Enter password within a minute:",
             silent: true,
             timeout: 60 * 1000,
         });
+        await page.waitForSelector('#passwordInput');
         await page.type('#passwordInput', password);
         await page.waitForSelector('#submitButton');
         await Promise.all([
