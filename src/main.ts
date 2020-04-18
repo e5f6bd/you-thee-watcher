@@ -13,9 +13,10 @@ import {ChatPostMessageArguments, WebClient} from "@slack/web-api";
 import {createIdMap, distinct, sameSet, sleep} from "./utils";
 import {materialItemIsFile, samePeriod} from "./itc-lms/utils";
 import fetch from 'node-fetch';
-import {createDriveClient, createFolderAndGetId} from "./drive";
+import {createDriveClient, createFolderAndGetId} from "./drive/utils";
 import {drive_v3} from "googleapis";
 import Schema$File = drive_v3.Schema$File;
+import {downloadDataStore, uploadDataStore} from "./drive/data-store";
 
 // Diffs and slack
 type PostDraft = Omit<ChatPostMessageArguments, "channel">;
@@ -278,6 +279,11 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
 
 // Main function
 (async () => {
+    await fs.promises.access("data-store").catch(async () => {
+        console.log("data-store directory was not found, downloading");
+        await downloadDataStore();
+    })
+
     const itcLmsJsonPath = "data-store/itc-lms.json";
 
     // load stored courses information
@@ -311,4 +317,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
 
     // save updated courses information to file
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
+
+    // save data store to google drive
+    await uploadDataStore();
 })().catch(console.error);

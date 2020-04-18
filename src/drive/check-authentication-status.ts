@@ -1,4 +1,4 @@
-import {createDriveClient} from "./drive";
+import {createDriveClient} from "./utils";
 
 // Run this file to check the authentication status of Google Drive.
 (async () => {

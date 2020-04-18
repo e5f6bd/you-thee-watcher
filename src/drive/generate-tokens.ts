@@ -1,6 +1,6 @@
 import fs from "fs";
-import {createNewOauthClient} from "./drive";
-import {askQuestionViaStdin} from "./utils";
+import {createNewOauthClient} from "./utils";
+import {askQuestionViaStdin} from "../utils";
 
 // Run this file to generate tokens.json.
 (async () => {
