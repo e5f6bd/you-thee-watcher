@@ -267,14 +267,21 @@ export const logInToItcLms = async (page: Page): Promise<boolean> => {
         await page.goto((await getURLObject(page, "/saml/login?disco=true")).href, {
             waitUntil: "networkidle0"
         });
-        await page.waitForFunction(() => document.location.href.startsWith("https://sts.adm.u-tokyo.ac.jp/adfs/ls/"));
+        await page.waitForFunction(
+            () => document.location.href.startsWith("https://sts.adm.u-tokyo.ac.jp/adfs/ls/")
+        ).catch(reason => {
+            console.error(reason);
+            throw new Error(`Location is still at ${page.url()}`);
+        });
         if (!process.env.YOU_THEE_ACCOUNT) throw new Error("Failed automatic login: account not set.");
+        await page.waitForSelector('#userNameInput');
         await page.type('#userNameInput', process.env.YOU_THEE_ACCOUNT!);
         const password = process.env.YOU_THEE_PASSWORD || await promisify(Read)({
             prompt: "Enter password within a minute:",
             silent: true,
             timeout: 60 * 1000,
         });
+        await page.waitForSelector('#passwordInput');
         await page.type('#passwordInput', password);
         await page.waitForSelector('#submitButton');
         await Promise.all([
