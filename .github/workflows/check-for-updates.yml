@@ -21,7 +21,7 @@ jobs:
           YOU_THEE_DRIVE_TOKENS_JSON: ${{ secrets.YOU_THEE_DRIVE_TOKENS_JSON }}
 
       - name: Prepare other environmental variables
-        run: 'echo "$YOU_THEE_ENV" > tokens.json'
+        run: 'echo "$YOU_THEE_ENV" > .env'
         shell: bash
         env:
           YOU_THEE_ENV: ${{ secrets.YOU_THEE_ENV }}
