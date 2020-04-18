@@ -1,5 +1,5 @@
-import * as querystring from "querystring";
-import {Browser, ElementHandle, Page} from "puppeteer";
+import querystring from "querystring";
+import {Browser, Cookie, ElementHandle, Page} from "puppeteer";
 import {
     Assignment,
     AssignmentSubmissionMethod,
@@ -14,7 +14,7 @@ import {
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import {distinct} from "../utils";
-import {getStringProperty, getInnerText, getValue} from "../puppeteer-utils";
+import {getInnerText, getStringProperty, getValue} from "../puppeteer-utils";
 
 dayjs.extend(customParseFormat)
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -292,4 +292,26 @@ export const getAllCourses = async (browser: Browser): Promise<Course[]> => {
         courses.push(await getCourse(browser)(courseId));
     }
     return courses;
+}
+
+export const getAttachmentFileDownloadUrl = (file: AttachmentFile): string => {
+    return "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission_download/" +
+        encodeURIComponent(file.filename) + "?" + querystring.encode({
+            // idnumber: 2020FEN-CO3125L10F01
+            downloadFileName: file.filename,
+            objectName: file.id,
+            // downloadMode:
+        });
+};
+
+export interface ItcLmsCredentials {
+    ing: string;
+    JSESSIONID: string;
+}
+
+export const getCredentialsFromCookies = (cookies: Cookie[]): ItcLmsCredentials => {
+    const ing = cookies.filter(cookie => cookie.domain === '.itc-lms.ecc.u-tokyo.ac.jp' && cookie.name === 'ing')[0];
+    const JSESSIONID = cookies.filter(cookie => cookie.domain === "itc-lms.ecc.u-tokyo.ac.jp" && cookie.name == 'JSESSIONID')[0];
+    if (!ing || !JSESSIONID) throw new Error("Could not obtain credentials cookie from the browser");
+    return {ing: ing.value, JSESSIONID: JSESSIONID.value};
 }

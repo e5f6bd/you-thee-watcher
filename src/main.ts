@@ -1,26 +1,28 @@
-import puppeteer, {Cookie} from 'puppeteer';
-import {getAllCourses, getCourse, logInToItcLms} from "./itc-lms/api";
+import puppeteer from 'puppeteer';
+import {
+    getAllCourses,
+    getAttachmentFileDownloadUrl,
+    getCourse,
+    getCredentialsFromCookies,
+    ItcLmsCredentials,
+    logInToItcLms
+} from "./itc-lms/api";
 import * as fs from "fs";
 import {Assignment, AttachmentFile, Course, Material, Notification} from "./itc-lms/types";
 import {ChatPostMessageArguments, WebClient} from "@slack/web-api";
-import {distinct, sameSet, sleep} from "./utils";
+import {createIdMap, distinct, sameSet, sleep} from "./utils";
 import {materialItemIsFile, samePeriod} from "./itc-lms/utils";
-import * as querystring from "querystring";
 import fetch from 'node-fetch';
 import {createDriveClient, createFolderAndGetId} from "./drive";
 import {drive_v3} from "googleapis";
 import Schema$File = drive_v3.Schema$File;
 
-const debugMode = !!process.env.YOU_THEE_DEBUG_MODE;
-
-const createIdMap = <T extends { id: string }>(items: T[]): Map<string, T> =>
-    new Map(items.map(item => [item.id, item]));
+// Diffs and slack
+type PostDraft = Omit<ChatPostMessageArguments, "channel">;
 
 const getSlackChannel = (courseId: string): string => {
     return process.env.YOU_THEE_SLACK_CHANNEL_ID!;
 }
-
-type PostDraft = Omit<ChatPostMessageArguments, "channel">;
 
 const createNotificationPost = (oldOne?: Notification, newOne?: Notification): PostDraft[] => {
     if (oldOne && newOne) {
@@ -108,28 +110,31 @@ const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDraft[] =>
     return posts;
 };
 
-const getDownloadUrl = (file: AttachmentFile): string => {
-    return "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission_download/" +
-        encodeURIComponent(file.filename) + "?" + querystring.encode({
-            // idnumber: 2020FEN-CO3125L10F01
-            downloadFileName: file.filename,
-            objectName: file.id,
-            // downloadMode:
-        });
+const checkDiffAndUpdateSlack = async (courses: Map<string, Course>, newCourses: Course[]) => {
+    const slackClient = new WebClient(process.env.YOU_THEE_SLACK_BOT_USER_TOKEN);
+
+    for (const newCourse of newCourses) {
+        const channelId = getSlackChannel(newCourse.id);
+        const {channel: {is_member: isMember}} = await slackClient.conversations.info({channel: channelId}) as any;
+        if (!isMember) await slackClient.conversations.join({channel: channelId});
+
+        const oldCourse = courses.get(newCourse.id);
+        if (oldCourse) {
+            for (const postDraft of processCourseDiff(oldCourse, newCourse)) {
+                const post = {
+                    channel: channelId,
+                    ...postDraft,
+                } as ChatPostMessageArguments;
+                post.text = `授業 ${newCourse.name}\n` + post.text;
+                await slackClient.chat.postMessage(post);
+                await sleep(2000);
+            }
+        }
+        courses.set(newCourse.id, newCourse);
+    }
 };
 
-interface ItcLmsCredentials {
-    ing: string;
-    JSESSIONID: string;
-}
-
-const getCredentialsFromCookies = (cookies: Cookie[]): ItcLmsCredentials => {
-    const ing = cookies.filter(cookie => cookie.domain === '.itc-lms.ecc.u-tokyo.ac.jp' && cookie.name === 'ing')[0];
-    const JSESSIONID = cookies.filter(cookie => cookie.domain === "itc-lms.ecc.u-tokyo.ac.jp" && cookie.name == 'JSESSIONID')[0];
-    if (!ing || !JSESSIONID) throw new Error("Could not obtain credentials cookie from the browser");
-    return {ing: ing.value, JSESSIONID: JSESSIONID.value};
-}
-
+// Files and google drive
 interface CourseFolderMapping {
     id: string;  // course id
     rootFolderId: string;
@@ -152,7 +157,7 @@ const saveFileToDriveIfNeeded = async (
 ): Promise<string | undefined> => {
     if (driveIdMap.has(file.id)) return;
     console.log(`Saving ${file.id}`);
-    const response = await fetch(getDownloadUrl(file), {
+    const response = await fetch(getAttachmentFileDownloadUrl(file), {
         headers: {
             "Cookie": `ing=${credentials.ing}; JSESSIONID=${credentials.JSESSIONID}`
         }
@@ -269,17 +274,20 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
     await fs.promises.writeFile(mappingJsonPath, JSON.stringify([...mappings.values()]));
 };
 
+// Main function
 (async () => {
     const itcLmsJsonPath = "data-store/itc-lms.json";
 
+    // load stored courses information
     const courses = await fs.promises.readFile(itcLmsJsonPath, "utf-8")
         .then(str => createIdMap<Course>(JSON.parse(str)))
         .catch(() => new Map<string, Course>());
 
-    const browser = await puppeteer.launch({headless: !debugMode});
-
+    // prepare a browser and log in
+    const browser = await puppeteer.launch({headless: !process.env.YOU_THEE_SHOW_CHROMIUM_WINDOW});
     const page = (await browser.pages())[0];
     if (!await logInToItcLms(page)) throw new Error("Failed to log in");
+    const credentials = getCredentialsFromCookies(await page.cookies());
 
     // debug purposes
     if (process.env.YOU_THEE_DEBUG_COURSE_ID) {
@@ -290,33 +298,14 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
         return;
     }
 
+    // retrieve latest courses information
     const newCourses = await getAllCourses(browser);
-    const credentials = getCredentialsFromCookies(await page.cookies());
+
     await browser.close();
 
     await updateDrive(Array.from(courses.values()), credentials);
+    await checkDiffAndUpdateSlack(courses, newCourses);
 
-    const slackClient = new WebClient(process.env.YOU_THEE_SLACK_BOT_USER_TOKEN);
-
-    for (const newCourse of newCourses) {
-        const channelId = getSlackChannel(newCourse.id);
-        const {channel: {is_member: isMember}} = await slackClient.conversations.info({channel: channelId}) as any;
-        if (!isMember) await slackClient.conversations.join({channel: channelId});
-
-        const oldCourse = courses.get(newCourse.id);
-        if (oldCourse) {
-            for (const postDraft of processCourseDiff(oldCourse, newCourse)) {
-                const post = {
-                    channel: channelId,
-                    ...postDraft,
-                } as ChatPostMessageArguments;
-                post.text = `授業 ${newCourse.name}\n` + post.text;
-                await slackClient.chat.postMessage(post);
-                await sleep(2000);
-            }
-        }
-        courses.set(newCourse.id, newCourse);
-    }
-
+    // save updated courses information to file
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
 })().catch(console.error);

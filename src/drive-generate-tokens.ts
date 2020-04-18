@@ -1,18 +1,6 @@
 import fs from "fs";
-import readline from "readline";
 import {createNewOauthClient} from "./drive";
-
-const askQuestion = (query: string): Promise<string> => {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-
-    return new Promise(resolve => rl.question(query, ans => {
-        rl.close();
-        resolve(ans);
-    }))
-};
+import {askQuestionViaStdin} from "./utils";
 
 // Run this file to generate tokens.json.
 (async () => {
@@ -28,7 +16,7 @@ const askQuestion = (query: string): Promise<string> => {
     });
 
     console.log(`Please access ${url} and obtain your access token.`);
-    const accessCode = await askQuestion("Enter the code you obtained: ");
+    const accessCode = await askQuestionViaStdin("Enter the code you obtained: ");
     const {tokens} = await oauth2Client.getToken(accessCode);
     await fs.promises.writeFile("tokens.json", JSON.stringify(tokens));
     console.log("Successfully saved tokens to tokens.json");
