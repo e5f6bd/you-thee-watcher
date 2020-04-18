@@ -15,6 +15,8 @@ import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import {distinct} from "../utils";
 import {getInnerText, getStringProperty, getValue} from "../puppeteer-utils";
+import {promisify} from "util";
+import Read from "read";
 
 dayjs.extend(customParseFormat)
 // http://ecma-international.org/ecma-262/5.1/#sec-15.9.1.1
@@ -259,9 +261,24 @@ export const logInToItcLms = async (page: Page): Promise<boolean> => {
         path: "/",
         httpOnly: true,
     });
-    await page.goto('https://itc-lms.ecc.u-tokyo.ac.jp', {
-        "waitUntil": "networkidle0"
-    });
+    await page.goto('https://itc-lms.ecc.u-tokyo.ac.jp', {waitUntil: "networkidle0"});
+    if (page.url() === "https://itc-lms.ecc.u-tokyo.ac.jp/login") {
+        await page.goto((await getURLObject(page, "/saml/login?disco=true")).href, {
+            waitUntil: "networkidle0"
+        });
+        if (!process.env.YOU_THEE_ACCOUNT) throw new Error("Failed automatic login: account not set.");
+        await page.type('#userNameInput', process.env.YOU_THEE_ACCOUNT!);
+        const password = process.env.YOU_THEE_PASSWORD || await promisify(Read)({
+            prompt: "Enter password within a minute:",
+            silent: true,
+            timeout: 60 * 1000,
+        });
+        await page.type('#passwordInput', password);
+        await Promise.all([
+            page.waitForFunction("document.location.host.indexOf('itc-lms') !== -1"),
+            page.click('#submitButton'),
+        ]);
+    }
     if (!checkLogIn(page)) return false;
     const url = page.url();
     switch (url) {

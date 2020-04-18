@@ -288,6 +288,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
     const page = (await browser.pages())[0];
     if (!await logInToItcLms(page)) throw new Error("Failed to log in");
     const credentials = getCredentialsFromCookies(await page.cookies());
+    console.log("Successfully logged in.")
 
     // debug purposes
     if (process.env.YOU_THEE_DEBUG_COURSE_ID) {
