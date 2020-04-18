@@ -25,6 +25,8 @@ export const createDriveClient = async (): Promise<Drive> => {
         const oldTokens = JSON.parse(await fs.promises.readFile(TOKENS_PATH, "utf-8"));
         const newTokens = Object.assign({}, oldTokens, tokens);
         await fs.promises.writeFile(TOKENS_PATH, JSON.stringify(newTokens));
+
+        console.log("Tokens has been refreshed.");
     });
 
     return google.drive({version: "v3", auth: oauth2Client});
