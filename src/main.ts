@@ -312,8 +312,8 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
 
     await browser.close();
 
-    await updateDrive(Array.from(courses.values()), credentials);
     await checkDiffAndUpdateSlack(courses, newCourses);
+    await updateDrive(Array.from(courses.values()), credentials);
 
     // save updated courses information to file
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
