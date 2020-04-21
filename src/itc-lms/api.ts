@@ -204,16 +204,19 @@ const parseMaterials = async (page: Page) => {
     return materials;
 };
 
+export const getCourseUrlFromId = (courseId: string, additionalParams?: object) =>
+    "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course?" + querystring.encode({
+        idnumber: courseId,
+        ...additionalParams,
+    });
+
 export const getCourse = (browser: Browser) => async (courseId: string): Promise<Course> => {
     // console.log(`Obtaining information for ${courseId}`);
 
     const page = await browser.newPage();
     await page.waitFor(500);
     await page.goto(
-        "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course?" + querystring.encode({
-            idnumber: courseId,
-            selectDisplayView: "ASSISTANT_ADD",
-        }),
+        getCourseUrlFromId(courseId, {selectDisplayView: "ASSISTANT_ADD"}),
         {"waitUntil": "networkidle0"});
     if (!checkLogIn(page)) throw new Error("Not logged in.");
 
@@ -324,10 +327,8 @@ export const getAllCourses = async (browser: Browser): Promise<Course[]> => {
 export const getAttachmentFileDownloadUrl = (file: AttachmentFile): string => {
     return "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission_download/" +
         encodeURIComponent(file.filename) + "?" + querystring.encode({
-            // idnumber: 2020FEN-CO3125L10F01
             downloadFileName: file.filename,
             objectName: file.id,
-            // downloadMode:
         });
 };
 
