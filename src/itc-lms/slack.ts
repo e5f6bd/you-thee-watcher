@@ -7,14 +7,11 @@ import {getAttachmentFileDownloadUrl, getCourseUrlFromId} from "./api";
 import dayjs from "dayjs";
 import * as querystring from "querystring";
 import utc from 'dayjs/plugin/utc';
-import {getDriveViewUrl} from "../drive/utils";
+import {createSpreadsheetClient, getDriveViewUrl} from "../drive/utils";
 
 dayjs.extend(utc)
 
 type PostDraft = Omit<ChatPostMessageArguments, "channel">;
-const getSlackChannel = (courseId: string): string => {
-    return process.env.YOU_THEE_SLACK_CHANNEL_ID!;
-}
 
 const mrkdwnTextBlock = (text: string): SectionBlock => {
     return {
@@ -105,7 +102,7 @@ export const createMaterialPost = (
         switch (item.contents.type) {
             case "File":
                 const driveFileId = driveIdMap.get(item.contents.id);
-                if(driveFileId) url = getDriveViewUrl(driveFileId);
+                if (driveFileId) url = getDriveViewUrl(driveFileId);
                 break;
             case "Link":
             case "Video":
@@ -207,15 +204,25 @@ export const processCourseDiff = (oldCourse: Course, newCourse: Course, driveIdM
     return posts;
 };
 
+export const getDriveIdToSlackChannel = async (): Promise<Map<string, string>> => {
+    const sheets = await createSpreadsheetClient();
+    const {data: {values: table}} = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.YOU_THEE_SPREADSHEET_CHANNEL_MAPPING_TABLE_ID,
+        range: process.env.YOU_THEE_SPREADSHEET_CHANNEL_MAPPING_TABLE_RANGE,
+    });
+    return new Map(table!.filter(row => row.length == 2).map(([v, k]) => [k, v]));
+};
+
 export const checkDiffAndUpdateSlack = async (
     courses: Map<string, Course>,
     newCourses: Course[],
     driveIdMap: Map<string, string>,
 ) => {
     const slackClient = new WebClient(process.env.YOU_THEE_SLACK_BOT_USER_TOKEN);
+    const courseIdToChannelMap = await getDriveIdToSlackChannel();
 
     for (const newCourse of newCourses) {
-        const channelId = getSlackChannel(newCourse.id);
+        const channelId = courseIdToChannelMap.get(newCourse.id) || process.env.YOU_THEE_SLACK_CHANNEL_ID!;
         const {channel: {is_member: isMember}} = await slackClient.conversations.info({channel: channelId}) as any;
         if (!isMember) await slackClient.conversations.join({channel: channelId});
 
