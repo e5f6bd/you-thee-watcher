@@ -7,7 +7,7 @@ export interface CourseMetadata {
     name: string;
 }
 
-export interface Course extends CourseMetadata{
+export interface Course extends CourseMetadata {
     notifications: Notification[];
     materials: Material[];
     assignments: Assignment[];
