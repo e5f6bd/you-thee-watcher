@@ -2,9 +2,12 @@ import {Dayjs} from "dayjs";
 
 export type DateLike = Dayjs | string;
 
-export interface Course {
+export interface CourseMetadata {
     id: string;
     name: string;
+}
+
+export interface Course extends CourseMetadata {
     notifications: Notification[];
     materials: Material[];
     assignments: Assignment[];

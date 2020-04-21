@@ -1,6 +1,7 @@
-import {drive_v3, google} from 'googleapis';
+import {drive_v3, google, sheets_v4} from 'googleapis';
 import fs from "fs";
 import Drive = drive_v3.Drive;
+import Sheets = sheets_v4.Sheets;
 
 export const createNewOauthClient = () => new google.auth.OAuth2(
     process.env.YOU_THEE_DRIVE_CLIENT_ID,
@@ -10,7 +11,7 @@ export const createNewOauthClient = () => new google.auth.OAuth2(
 
 const TOKENS_PATH = "./tokens.json";
 
-export const createDriveClient = async (): Promise<Drive> => {
+async function createOauth2Client() {
     const oauth2Client = createNewOauthClient();
     oauth2Client.setCredentials(JSON.parse(await fs.promises.readFile(TOKENS_PATH, "utf-8")));
     oauth2Client.on('tokens', async (tokens) => {
@@ -28,9 +29,16 @@ export const createDriveClient = async (): Promise<Drive> => {
 
         console.log("Tokens has been refreshed.");
     });
+    return oauth2Client;
+}
 
-    return google.drive({version: "v3", auth: oauth2Client});
+export const createDriveClient = async (): Promise<Drive> => {
+    return google.drive({version: "v3", auth: await createOauth2Client()});
 };
+
+export const createSpreadsheetClient = async (): Promise<Sheets> => {
+    return google.sheets({version: "v4", auth: await createOauth2Client()});
+}
 
 export const DRIVE_FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 
@@ -45,3 +53,5 @@ export const createFolderAndGetId = async (drive: drive_v3.Drive, name: string, 
     });
     return response.data.id!;
 };
+
+export const getDriveViewUrl = (fileId: string): string => `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
