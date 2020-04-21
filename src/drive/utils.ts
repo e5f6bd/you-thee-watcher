@@ -45,3 +45,5 @@ export const createFolderAndGetId = async (drive: drive_v3.Drive, name: string, 
     });
     return response.data.id!;
 };
+
+export const getDriveViewUrl = (fileId: string): string => `https://drive.google.com/file/d/${fileId}/view?usp=sharing`

@@ -7,6 +7,7 @@ import {getAttachmentFileDownloadUrl, getCourseUrlFromId} from "./api";
 import dayjs from "dayjs";
 import * as querystring from "querystring";
 import utc from 'dayjs/plugin/utc';
+import {getDriveViewUrl} from "../drive/utils";
 
 dayjs.extend(utc)
 
@@ -30,8 +31,13 @@ const escapeSlackString = (str: string): string => {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 };
-const createSlackLink = (url: string, unescapedLinkText: string): string =>
-    `<${escapeSlackString(url)}|${escapeSlackString(unescapedLinkText)}>`
+const createSlackLink = (unescapedLinkText: string, url?: string): string => {
+    if (url) {
+        return `<${escapeSlackString(url)}|${escapeSlackString(unescapedLinkText)}>`;
+    } else {
+        return escapeSlackString(unescapedLinkText);
+    }
+}
 const DIVIDER = Object.freeze({type: "divider"});
 
 const dateTimeToLink = (dateLike: DateLike): string => {
@@ -41,7 +47,7 @@ const dateTimeToLink = (dateLike: DateLike): string => {
         iso: date.format("YYYYMMDDTHHmm"),
         p1: 248,
     });
-    return createSlackLink(link, dateStr);
+    return createSlackLink(dateStr, link);
 };
 
 export const createCourseContext = (course: CourseMetadata): ContextBlock => {
@@ -50,19 +56,21 @@ export const createCourseContext = (course: CourseMetadata): ContextBlock => {
         "elements": [
             {
                 "type": "mrkdwn",
-                "text": createSlackLink(getCourseUrlFromId(course.id), course.name),
+                "text": createSlackLink(course.name, getCourseUrlFromId(course.id)),
             }
         ]
     }
 }
 
+// noinspection JSUnusedLocalSymbols
 export const createNotificationPost = (
     course: CourseMetadata,
     notification: Notification,
     titleGenerator: (str: string) => string,
+    driveIdMap: Map<string, string>,
 ): PostDraft => {
     const title = titleGenerator(
-        `お知らせ「${createSlackLink(getCourseUrlFromId(course.id) + "#information", notification.title)}」`);
+        `お知らせ「${createSlackLink(notification.title, getCourseUrlFromId(course.id) + "#information")}」`);
     const blocks = [
         mrkdwnTextBlock(title),
         DIVIDER,
@@ -79,10 +87,11 @@ export const createNotificationPost = (
 export const createMaterialPost = (
     course: CourseMetadata,
     material: Material,
-    titleGenerator: (str: string) => string
+    titleGenerator: (str: string) => string,
+    driveIdMap: Map<string, string>,
 ): PostDraft => {
     const title = titleGenerator(
-        `教材「${createSlackLink(getCourseUrlFromId(course.id) + "#materialContents", material.title)}」`);
+        `教材「${createSlackLink(material.title, getCourseUrlFromId(course.id) + "#materialContents")}」`);
     const blocks = [
         mrkdwnTextBlock(title),
         DIVIDER,
@@ -92,8 +101,19 @@ export const createMaterialPost = (
         DIVIDER,
     ];
     for (const item of material.items) {
+        let url = getCourseUrlFromId(course.id) + "#" + item.id;
+        switch (item.contents.type) {
+            case "File":
+                const driveFileId = driveIdMap.get(item.contents.id);
+                if(driveFileId) url = getDriveViewUrl(driveFileId);
+                break;
+            case "Link":
+            case "Video":
+                url = item.contents.url;
+                break;
+        }
         let blockText = "•\t";
-        blockText += createSlackLink(getCourseUrlFromId(course.id) + "#" + item.id, item.title);
+        blockText += createSlackLink(item.title, url);
         blockText += " ";
         blockText += escapeSlackString(item.comments);
         blocks.push(mrkdwnTextBlock(blockText));
@@ -107,16 +127,17 @@ export const createMaterialPost = (
         blocks,
     };
 }
-export const createAssignmentPost = (course: CourseMetadata,
-                                     assignment: Assignment,
-                                     titleGenerator: (str: string) => string
+export const createAssignmentPost = (
+    course: CourseMetadata,
+    assignment: Assignment,
+    titleGenerator: (str: string) => string,
+    driveIdMap: Map<string, string>,
 ): PostDraft => {
     const title = titleGenerator(
-        `課題「${createSlackLink(
-            "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission?" + querystring.encode({
-                idnumber: course.id,
-                reportId: assignment.id,
-            }), assignment.title)}」`);
+        `課題「${createSlackLink(assignment.title, "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission?" + querystring.encode({
+            idnumber: course.id,
+            reportId: assignment.id,
+        }))}」`);
     const blocks = [
         mrkdwnTextBlock(title),
         DIVIDER,
@@ -127,8 +148,10 @@ export const createAssignmentPost = (course: CourseMetadata,
     ];
     if (assignment.attachmentFiles.length > 0) blocks.push(DIVIDER);
     for (const item of assignment.attachmentFiles) {
+        const driveFileId = driveIdMap.get(item.id);
+        const url = driveFileId ? getDriveViewUrl(driveFileId) : getAttachmentFileDownloadUrl(item);
         let blockText = "•\t";
-        blockText += createSlackLink(getAttachmentFileDownloadUrl(item), item.title);
+        blockText += createSlackLink(item.title, url);
         blocks.push(mrkdwnTextBlock(blockText));
     }
     blocks.push(
@@ -146,32 +169,36 @@ export const compareAndCreatePost = <T extends { id: string }>(
     oldOne: T | undefined,
     newOne: T | undefined,
     itemsAreSame: (a: T, b: T) => boolean,
-    itemToPost: (course: CourseMetadata, item: T, titleGenerator: (str: string) => string) => PostDraft,
+    itemToPost: (course: CourseMetadata, item: T, titleGenerator: (str: string) => string,
+                 driveIdMap: Map<string, string>) => PostDraft,
+    driveIdMap: Map<string, string>,
 ): PostDraft[] => {
     if (oldOne && newOne) {
         if (!itemsAreSame(oldOne, newOne)) {
-            return [itemToPost(course, newOne, str => `${str}の内容が変更されました。`)]
+            return [itemToPost(course, newOne, str => `${str}の内容が変更されました。`, driveIdMap)]
         }
     } else if (oldOne) {
-        return [itemToPost(course, oldOne, str => `${str}が削除されました。`)]
+        return [itemToPost(course, oldOne, str => `${str}が削除されました。`, driveIdMap)]
     } else if (newOne) {
-        return [itemToPost(course, newOne, str => `${str}が追加されました。`)]
+        return [itemToPost(course, newOne, str => `${str}が追加されました。`, driveIdMap)]
     }
     return [];
 }
 
-export const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDraft[] => {
+export const processCourseDiff = (oldCourse: Course, newCourse: Course, driveIdMap: Map<string, string>): PostDraft[] => {
     const posts: PostDraft[] = [];
     const processDifferences = <T extends { id: string }>(
         olds: T[],
         news: T[],
         itemsAreSame: (a: T, b: T) => boolean,
-        itemToPost: (course: CourseMetadata, a: T, titleGenerator: (str: string) => string) => PostDraft,
+        itemToPost: (course: CourseMetadata, item: T, titleGenerator: (str: string) => string,
+                     driveIdMap: Map<string, string>) => PostDraft,
     ) => {
         const oldMap = createIdMap(olds);
         const newMap = createIdMap(news);
         for (const id of distinct([...oldMap.keys(), ...newMap.keys()])) {
-            posts.push(...compareAndCreatePost(newCourse, oldMap.get(id), newMap.get(id), itemsAreSame, itemToPost));
+            posts.push(...compareAndCreatePost(
+                newCourse, oldMap.get(id), newMap.get(id), itemsAreSame, itemToPost, driveIdMap));
         }
     }
     processDifferences(oldCourse.notifications, newCourse.notifications, sameNotification, createNotificationPost);
@@ -179,19 +206,12 @@ export const processCourseDiff = (oldCourse: Course, newCourse: Course): PostDra
     processDifferences(oldCourse.materials, newCourse.materials, sameMaterial, createMaterialPost);
     return posts;
 };
-export const addCourseContext = (post: ChatPostMessageArguments, course: Course) => {
-    post.blocks = post.blocks || [];
-    post.blocks.push({
-        type: "context",
-        elements: [
-            {
-                type: "mrkdwn",
-                text: course.name,
-            }
-        ]
-    });
-};
-export const checkDiffAndUpdateSlack = async (courses: Map<string, Course>, newCourses: Course[]) => {
+
+export const checkDiffAndUpdateSlack = async (
+    courses: Map<string, Course>,
+    newCourses: Course[],
+    driveIdMap: Map<string, string>,
+) => {
     const slackClient = new WebClient(process.env.YOU_THEE_SLACK_BOT_USER_TOKEN);
 
     for (const newCourse of newCourses) {
@@ -201,12 +221,11 @@ export const checkDiffAndUpdateSlack = async (courses: Map<string, Course>, newC
 
         const oldCourse = courses.get(newCourse.id);
         if (oldCourse) {
-            for (const postDraft of processCourseDiff(oldCourse, newCourse)) {
+            for (const postDraft of processCourseDiff(oldCourse, newCourse, driveIdMap)) {
                 const post = {
                     channel: channelId,
                     ...postDraft,
                 } as ChatPostMessageArguments;
-                addCourseContext(post, newCourse);
                 await slackClient.chat.postMessage(post);
                 await sleep(2000);
             }

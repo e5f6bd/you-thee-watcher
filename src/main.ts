@@ -71,7 +71,7 @@ const saveFileToDriveIfNeeded = async (
     });
 };
 
-const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) => {
+const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): Promise<Map<string, string>> => {
     const masterJsonPath = "data-store/itc-lms-drive-master.json";
     const driveIdMap = await fs.promises.readFile(masterJsonPath, "utf-8")
         .then(str => new Map(Object.entries(JSON.parse(str))))
@@ -158,6 +158,8 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
 
     await fs.promises.writeFile(masterJsonPath, JSON.stringify(Object.fromEntries(driveIdMap.entries())));
     await fs.promises.writeFile(mappingJsonPath, JSON.stringify([...mappings.values()]));
+
+    return driveIdMap;
 };
 
 // Main function
@@ -195,8 +197,8 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials) =>
 
     await browser.close();
 
-    await checkDiffAndUpdateSlack(courses, newCourses);
-    await updateDrive(Array.from(courses.values()), credentials);
+    const driveIdMap = await updateDrive(Array.from(courses.values()), credentials);
+    await checkDiffAndUpdateSlack(courses, newCourses, driveIdMap);
 
     // save updated courses information to file
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
