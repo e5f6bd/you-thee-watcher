@@ -204,5 +204,9 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
 
     // save data store to google drive
-    if(!process.env.YOU_THEE_DRIVE_NO_UPLOAD) await uploadDataStore();
+    if (!process.env.YOU_THEE_DRIVE_NO_UPLOAD) {
+        console.log("Uploading data store to drive.");
+        await uploadDataStore().catch(console.error);
+        console.log("Uploaded data store to drive.");
+    }
 })().catch(console.error);

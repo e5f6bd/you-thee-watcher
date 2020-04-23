@@ -3,7 +3,6 @@ import * as stream from "stream";
 import {promisify} from "util";
 import * as tar from "tar";
 
-const pipeline = promisify(stream.pipeline);
 
 export const downloadDataStore = async () => {
     const drive = await createDriveClient();
@@ -11,13 +10,20 @@ export const downloadDataStore = async () => {
         fileId: process.env.YOU_THEE_DRIVE_DATA_STORE_ID,
         alt: "media",
     }, {responseType: "stream"}) as unknown as { data: stream.PassThrough };
+    const pipeline = promisify(stream.pipeline);
     await pipeline(data, tar.extract({path: "."}));
 };
 
 export const uploadDataStore = async () => {
+    console.log("uploadDataStore() called");
     const drive = await createDriveClient();
     const passThrough = new stream.PassThrough();
-    await pipeline(tar.create({gzip: true}, ["data-store"]), passThrough);
+    stream.pipeline(tar.create({gzip: true}, ["data-store"]), passThrough, (err) => {
+        if (err) {
+            throw err;
+        }
+    })
+    console.log("uploadDataStore() is halfway done");
 
     // If you pass the stream created by tar.create directly to the drive update API,
     // it will not regard is at a readable stream, but an object convertible plain text,
@@ -36,4 +42,5 @@ export const uploadDataStore = async () => {
             body: passThrough,
         },
     });
+    console.log("uploadDataStore() successfully ended - hopefully.");
 };
