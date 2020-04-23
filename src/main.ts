@@ -197,12 +197,12 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
 
     await browser.close();
 
-    const driveIdMap = await updateDrive(Array.from(courses.values()), credentials);
+    const driveIdMap = await updateDrive(Array.from(newCourses.values()), credentials);
     await checkDiffAndUpdateSlack(courses, newCourses, driveIdMap);
 
     // save updated courses information to file
     await fs.promises.writeFile(itcLmsJsonPath, JSON.stringify(Array.from(courses.values())));
 
     // save data store to google drive
-    await uploadDataStore();
+    if(!process.env.YOU_THEE_DRIVE_NO_UPLOAD) await uploadDataStore();
 })().catch(console.error);

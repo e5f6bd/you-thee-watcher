@@ -222,7 +222,9 @@ export const checkDiffAndUpdateSlack = async (
     const courseIdToChannelMap = await getDriveIdToSlackChannel();
 
     for (const newCourse of newCourses) {
-        const channelId = courseIdToChannelMap.get(newCourse.id) || process.env.YOU_THEE_SLACK_CHANNEL_ID!;
+        const channelId = process.env.YOU_THEE_SLACK_ALWAYS_DEBUG ?
+            process.env.YOU_THEE_SLACK_CHANNEL_ID! :
+            courseIdToChannelMap.get(newCourse.id) || process.env.YOU_THEE_SLACK_CHANNEL_ID!;
         const {channel: {is_member: isMember}} = await slackClient.conversations.info({channel: channelId}) as any;
         if (!isMember) await slackClient.conversations.join({channel: channelId});
 

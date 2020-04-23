@@ -105,8 +105,7 @@ const parseAssignment = (page: Page) => async (element: ElementHandle): Promise<
         (await attachmentsDiv.$x("./div")).map(parseAttachmentDiv("downloadFile")));
     const submissionPeriod = strToPeriod(
         await getInnerText(submissionPeriodDiv))
-    const lateSubmissionAllowed = "Enable" ===
-        await getInnerText(lateSubmissionDiv);
+    const lateSubmissionAllowed = ["Enable", "可"].includes(await getInnerText(lateSubmissionDiv));
 
     await newPage.close();
 
