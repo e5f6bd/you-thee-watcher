@@ -11,7 +11,7 @@ export const createNewOauthClient = () => new google.auth.OAuth2(
 
 const TOKENS_PATH = "./tokens.json";
 
-async function createOauth2Client() {
+const createOauth2Client = async () => {
     const oauth2Client = createNewOauthClient();
     oauth2Client.setCredentials(JSON.parse(await fs.promises.readFile(TOKENS_PATH, "utf-8")));
     oauth2Client.on('tokens', async (tokens) => {
@@ -30,7 +30,7 @@ async function createOauth2Client() {
         console.log("Tokens has been refreshed.");
     });
     return oauth2Client;
-}
+};
 
 export const createDriveClient = async (): Promise<Drive> => {
     return google.drive({version: "v3", auth: await createOauth2Client()});

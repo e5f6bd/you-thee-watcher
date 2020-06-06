@@ -209,4 +209,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
         await uploadDataStore().catch(console.error);
         console.log("Uploaded data store to drive.");
     }
-})().catch(console.error);
+})().catch(e => {
+    console.error(e);
+    process.exit(1);
+});
