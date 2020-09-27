@@ -114,3 +114,5 @@ temp/
 data-store/
 # Google API Credentials
 tokens.json
+# Input file
+/ignore/
