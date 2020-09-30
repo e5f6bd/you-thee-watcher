@@ -1,6 +1,3 @@
-import {ItcLmsCredentials} from "../itc-lms/api";
-import {JSDOM} from "jsdom";
-import fetch from 'node-fetch';
 import fs from "fs";
 import readline from "readline";
 import {getSearchResult, SearchResult} from "../itc-lms/search";
