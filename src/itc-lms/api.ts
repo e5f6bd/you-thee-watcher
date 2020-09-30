@@ -224,13 +224,21 @@ export const getCourse = (browser: Browser) => async (courseId: string): Promise
     const notifications = [];
     // Promise.all cannot be used here because each notification window has to be opened separately
     for (const element of await page.$$("div#information div.subblock_list_line")) {
-        notifications.push(await parseNotification(page)(element));
+        try {
+            notifications.push(await parseNotification(page)(element));
+        } catch (e) {
+            console.error("Failed to obtain a notification...");
+        }
     }
 
     const assignments = [];
     // This may be replaced with Promise.all, but for now it's left unchanged for the sake of consistency
     for (const element of await page.$$("div#report div.report_list_line")) {
-        assignments.push(await parseAssignment(page)(element))
+        try {
+            assignments.push(await parseAssignment(page)(element))
+        } catch (e) {
+            console.error("Failed to obtain an assignment...");
+        }
     }
 
     const materials = await parseMaterials(page);
