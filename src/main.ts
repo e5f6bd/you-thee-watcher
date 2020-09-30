@@ -186,7 +186,11 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
     // debug purposes
     if (process.env.YOU_THEE_DEBUG_COURSE_ID) {
         // single-course debug mode
-        console.log(JSON.stringify(await getCourse(browser)(process.env.YOU_THEE_DEBUG_COURSE_ID)))
+        try {
+            console.log(JSON.stringify(await getCourse(browser)(process.env.YOU_THEE_DEBUG_COURSE_ID)))
+        } catch(e) {
+            console.error(e);
+        }
 
         await page.waitFor(6000000);
         return;
