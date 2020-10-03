@@ -146,7 +146,7 @@ export const createAssignmentPost = (
     if (assignment.attachmentFiles.length > 0) blocks.push(DIVIDER);
     for (const item of assignment.attachmentFiles) {
         const driveFileId = driveIdMap.get(item.id);
-        const url = driveFileId ? getDriveViewUrl(driveFileId) : getAttachmentFileDownloadUrl(item);
+        const url = driveFileId ? getDriveViewUrl(driveFileId) : getAttachmentFileDownloadUrl(course.id, item);
         let blockText = "•\t";
         blockText += createSlackLink(item.title, url);
         blocks.push(mrkdwnTextBlock(blockText));

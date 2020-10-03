@@ -331,9 +331,10 @@ export const getAllCourses = async (browser: Browser): Promise<Course[]> => {
     return courses;
 }
 
-export const getAttachmentFileDownloadUrl = (file: AttachmentFile): string => {
+export const getAttachmentFileDownloadUrl = (courseId: string, file: AttachmentFile): string => {
     return "https://itc-lms.ecc.u-tokyo.ac.jp/lms/course/report/submission_download/" +
         encodeURIComponent(file.filename) + "?" + querystring.encode({
+            idnumber: courseId,
             downloadFileName: file.filename,
             objectName: file.id,
         });
