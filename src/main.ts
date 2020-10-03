@@ -37,11 +37,12 @@ const saveFileToDriveIfNeeded = async (
     credentials: ItcLmsCredentials,
     drive: drive_v3.Drive,
     driveIdMap: Map<string, string>,
+    courseId: string,
     file: AttachmentFile
 ): Promise<string | undefined> => {
     if (driveIdMap.has(file.id)) return;
     // console.log(`Saving ${file.id}`);
-    const response = await fetch(getAttachmentFileDownloadUrl(file), {
+    const response = await fetch(getAttachmentFileDownloadUrl(courseId, file), {
         headers: {
             "Cookie": `ing=${credentials.ing}; JSESSIONID=${credentials.JSESSIONID}`
         }
@@ -119,7 +120,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
                 undefined;
             if (assignmentFolderId) assignmentsMappings.set(assignment.id, assignmentFolderId);
             for (const file of assignment.attachmentFiles) {
-                const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, file);
+                const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, course.id, file);
                 if (!fileId || !assignmentFolderId) continue;
                 drive.files.update({fileId, addParents: assignmentFolderId})
             }
@@ -143,7 +144,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
             if (materialFolderId) materialsMappings.set(material.id, materialFolderId);
             for (const item of material.items) {
                 if (!materialItemIsFile(item.contents)) continue;
-                const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, item.contents);
+                const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, course.id, item.contents);
                 if (!fileId || !materialFolderId) continue;
                 drive.files.update({fileId, addParents: materialFolderId})
             }
