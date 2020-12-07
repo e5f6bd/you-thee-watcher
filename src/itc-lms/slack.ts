@@ -213,6 +213,19 @@ export const getDriveIdToSlackChannel = async (): Promise<Map<string, string>> =
     return new Map(table!.filter(row => row.length == 2).map(([v, k]) => [k, v]));
 };
 
+const splitPostDraft = (post: PostDraft): PostDraft[] => {
+    type Blocks = Exclude<ChatPostMessageArguments["blocks"], undefined>;
+    const ret = [{
+        title: post.title,
+        blocks: <Blocks>[],
+    }];
+    for (let [i, block] of (post.blocks as Blocks || []).entries()) {
+        if (i && i % 30 == 0) ret.push({title: "", blocks: []});
+        ret.slice(-1)[0].blocks.push(block);
+    }
+    return ret;
+};
+
 export const checkDiffAndUpdateSlack = async (
     courses: Map<string, Course>,
     newCourses: Course[],
@@ -231,12 +244,15 @@ export const checkDiffAndUpdateSlack = async (
         const oldCourse = courses.get(newCourse.id);
         if (oldCourse) {
             for (const postDraft of processCourseDiff(oldCourse, newCourse, driveIdMap)) {
-                const post = {
-                    channel: channelId,
-                    ...postDraft,
-                } as ChatPostMessageArguments;
-                await slackClient.chat.postMessage(post);
-                await sleep(2000);
+                console.log(JSON.stringify(postDraft));
+                for (const postDraftChunk of splitPostDraft(postDraft)) {
+                    const post = {
+                        channel: channelId,
+                        ...postDraftChunk,
+                    } as ChatPostMessageArguments;
+                    await slackClient.chat.postMessage(post);
+                    await sleep(2000);
+                }
             }
         }
         courses.set(newCourse.id, newCourse);
