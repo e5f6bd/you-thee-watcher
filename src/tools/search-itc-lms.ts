@@ -9,8 +9,8 @@ import {getSearchResult, SearchResult} from "../itc-lms/search";
     }
     const csrf = process.env.YOU_THEE_ITC_LMS_SEARCH_CSRF!;
 
-    const [, , file] = process.argv;
-    if (!file) throw new Error("Specify input file.");
+    const [, , file, outputFile] = process.argv;
+    if (!file || !outputFile) throw new Error("Specify input and output file.");
     const lines = readline.createInterface({
         input: await fs.createReadStream(file),
         crlfDelay: Infinity,
@@ -26,5 +26,5 @@ import {getSearchResult, SearchResult} from "../itc-lms/search";
         }
     }
     console.log(res);
-    console.log(JSON.stringify([...res]));
+    await fs.promises.writeFile(outputFile, JSON.stringify([...res]));
 })().catch(console.error);
