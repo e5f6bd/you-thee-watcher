@@ -1,5 +1,6 @@
 import querystring from "querystring";
-import {Browser, Cookie, ElementHandle, Page} from "puppeteer";
+import {Browser, Protocol, ElementHandle, Page, HTTPResponse} from "puppeteer";
+import Cookie = Protocol.Network.Cookie;
 import {
     Assignment,
     AssignmentSubmissionMethod,
@@ -65,10 +66,10 @@ const parseNotification = (page: Page) => async (element: ElementHandle): Promis
 
     // Wait until the notification contents are loaded
     // (This is judged by the completion of the request below)
-    await page.waitForResponse(response =>
+    await page.waitForResponse((response: HTTPResponse) =>
         response.url().indexOf("https://itc-lms.ecc.u-tokyo.ac.jp/lms/coursetop/information/listdetail") !== -1);
     // Wait for additional time just in case (because the DOM may not be ready immediately)
-    await page.waitFor(100);
+    await page.waitForTimeout(100);
 
     // Get the dialog
     const dialog = await page.$("div[role=dialog]");
@@ -80,7 +81,7 @@ const parseNotification = (page: Page) => async (element: ElementHandle): Promis
     // close the dialog
     const closeElement = (await dialog.$("div.ui-dialog-buttonpane button"))!;
     await closeElement.click();
-    await page.waitFor(500);
+    await page.waitForTimeout(500);
 
     return {
         id, title, contents,
@@ -185,7 +186,7 @@ const parseMaterials = async (page: Page) => {
 
     for (const block of (await page.$x(`id("materialList")/div`)).reverse()) {
         const classes = new Set(Object.values(
-            await block.getProperty("classList").then(e => e.jsonValue()) as { [key: string]: string }));
+            await block.getProperty("classList").then(e => e?.jsonValue()) as { [key: string]: string }));
         if (classes.has('subblock_list_head')) {
             materials.push(await parseMaterial(block, publicationPeriodDiv!, commentDiv!, materialItemDivs.reverse()));
             publicationPeriodDiv = null;
@@ -213,7 +214,7 @@ export const getCourse = (browser: Browser) => async (courseId: string): Promise
     // console.log(`Obtaining information for ${courseId}`);
 
     const page = await browser.newPage();
-    await page.waitFor(500);
+    await page.waitForTimeout(500);
     await page.goto(
         getCourseUrlFromId(courseId, {selectDisplayView: "ASSISTANT_ADD"}),
         {"waitUntil": "networkidle0"});

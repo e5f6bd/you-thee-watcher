@@ -122,7 +122,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
             for (const file of assignment.attachmentFiles) {
                 const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, course.id, file);
                 if (!fileId || !assignmentFolderId) continue;
-                drive.files.update({fileId, addParents: assignmentFolderId})
+                await drive.files.update({fileId, addParents: assignmentFolderId})
             }
         }
         if (mapping) {
@@ -146,7 +146,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
                 if (!materialItemIsFile(item.contents)) continue;
                 const fileId = await saveFileToDriveIfNeeded(credentials, drive, driveIdMap, course.id, item.contents);
                 if (!fileId || !materialFolderId) continue;
-                drive.files.update({fileId, addParents: materialFolderId})
+                await drive.files.update({fileId, addParents: materialFolderId})
             }
         }
         if (mapping) {
@@ -193,7 +193,7 @@ const updateDrive = async (courses: Course[], credentials: ItcLmsCredentials): P
             console.error(e);
         }
 
-        await page.waitFor(6000000);
+        await page.waitForTimeout(6000000);
         return;
     }
 
