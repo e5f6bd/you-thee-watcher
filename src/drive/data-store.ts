@@ -44,3 +44,5 @@ export const uploadDataStore = async () => {
     });
     console.log("uploadDataStore() successfully ended - hopefully.");
 };
+
+// downloadDataStore().catch(console.error);

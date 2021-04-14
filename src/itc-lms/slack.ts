@@ -258,3 +258,5 @@ export const checkDiffAndUpdateSlack = async (
         courses.set(newCourse.id, newCourse);
     }
 };
+
+// getDriveIdToSlackChannel().then(console.log).catch(console.error);
