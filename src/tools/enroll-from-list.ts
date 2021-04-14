@@ -81,7 +81,6 @@ const enrollClass = async (
             } else {
                 console.log(`Skipping: cannot enroll in ${course_id}`);
             }
-            break;
         }
     }
 })().catch(console.error);
